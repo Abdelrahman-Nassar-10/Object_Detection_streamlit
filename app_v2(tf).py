@@ -13,7 +13,7 @@ import tensorflow_hub as hub
 
 # Page configuration
 st.set_page_config(
-    page_title="Advanced Object Detection Studio",
+    page_title="Object Detection Studio",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,6 +24,7 @@ st.markdown("""
 <style>
     .main-header {
         font-size: 3rem;
+        color:#ffffff; 
         font-weight: bold;
         text-align: center;
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
