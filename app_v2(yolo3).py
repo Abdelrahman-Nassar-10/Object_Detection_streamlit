@@ -1,3 +1,6 @@
+#to run locally just run the python code then copy this into the terminal [streamlit run "c:/ML stuff/ObjectDetectiontask/app_v2.py"]
+
+
 import streamlit as st
 import cv2
 import cvlib as cv
@@ -19,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS 
 st.markdown("""
 <style>
     .main-header {
@@ -218,7 +221,6 @@ def main():
     debug_mode = st.sidebar.checkbox("🐛 Debug Mode", value=False, help="Show detailed debugging information")
     
     # Sidebar configuration
-    st.sidebar.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.sidebar.header("⚙️ Detection Settings")
     
     # Simplified model selection (only working models)
@@ -238,10 +240,9 @@ def main():
         help="Lower values = more detections (try 0.1 for maximum sensitivity)"
     )
     
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     # Image enhancement settings (simplified)
-    st.sidebar.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+
     st.sidebar.header("🎨 Image Enhancement")
     
     # Add option to skip enhancement
