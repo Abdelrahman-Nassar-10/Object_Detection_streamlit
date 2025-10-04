@@ -66,7 +66,7 @@ class ObjectDetectionApp:
         self.model = None
 
     def detect_objects_tf(self, image_pil: Image.Image, confidence: float = 0.5) -> Tuple[List, List, List, dict]:
-        """Detect objects using TensorFlow Hub model"""
+        """Detect objects using TF-Hub EfficientDet (works both with dict or tuple outputs)."""
         start_time = time.time()
         try:
             if self.model is None:
@@ -74,58 +74,54 @@ class ObjectDetectionApp:
                 self.model = load_detection_model()
             if self.model is None:
                 raise Exception("Model failed to load")
-
-            # PIL -> numpy (RGB)
-            img_array = np.array(image_pil)
-            if img_array.dtype != np.uint8:
-                img_array = (np.clip(img_array, 0, 1) * 255).astype(np.uint8)
-
-            # Add batch dimension
-            img_tensor = tf.convert_to_tensor(img_array)
-            img_tensor = tf.expand_dims(img_tensor, 0)
-
-            # Inference
-            results = self.model(img_tensor)
-
-            # Handle dict or tuple outputs
-            if isinstance(results, dict):
-                boxes = results['detection_boxes'][0].numpy()      # [N,4] ymin,xmin,ymax,xmax (0–1)
-                classes = results['detection_classes'][0].numpy()  # [N]
-                scores  = results['detection_scores'][0].numpy()   # [N]
+    
+            # PIL -> float32 [0,1], shape [1,H,W,3]
+            img = np.array(image_pil.convert("RGB"), dtype=np.float32) / 255.0
+            img = tf.convert_to_tensor(img)[tf.newaxis, ...]  # [1,H,W,3]
+    
+            # Call either the serving_default fn or the module directly
+            outputs = self.model(img)
+    
+            # Normalize outputs to a single dict of numpy arrays
+            if isinstance(outputs, dict):
+                boxes   = outputs.get("detection_boxes",   outputs.get("output_0"))[0].numpy()
+                classes = outputs.get("detection_classes", outputs.get("output_2"))[0].numpy()
+                scores  = outputs.get("detection_scores",  outputs.get("output_1"))[0].numpy()
             else:
-                # typical tuple: (boxes, scores, classes, num)
-                boxes  = results[0][0].numpy()
-                scores = results[1][0].numpy()
-                classes= results[2][0].numpy()
-
-            h, w = img_array.shape[:2]
+                # Some hubs return a tuple: (boxes, scores, classes, num)
+                boxes  = outputs[0][0].numpy()
+                scores = outputs[1][0].numpy()
+                classes= outputs[2][0].numpy()
+    
+            H, W = image_pil.size[1], image_pil.size[0]  # (height, width)
             bbox, labels, confidences = [], [], []
-
+    
             for i in range(len(scores)):
-                if scores[i] < confidence:
+                s = float(scores[i])
+                if s < confidence:
                     continue
-
-                ymin, xmin, ymax, xmax = boxes[i]
-                x1 = int(max(0, min(w - 1, xmin * w)))
-                y1 = int(max(0, min(h - 1, ymin * h)))
-                x2 = int(max(0, min(w - 1, xmax * w)))
-                y2 = int(max(0, min(h - 1, ymax * h)))
+    
+                ymin, xmin, ymax, xmax = [float(v) for v in boxes[i]]  # normalized
+                x1 = int(max(0, min(W - 1, xmin * W)))
+                y1 = int(max(0, min(H - 1, ymin * H)))
+                x2 = int(max(0, min(W - 1, xmax * W)))
+                y2 = int(max(0, min(H - 1, ymax * H)))
                 if x2 <= x1 or y2 <= y1:
                     continue
-
-                class_id = int(classes[i])
-                # Try 1-based first, then 0-based
-                if 0 <= class_id < len(COCO_CLASSES):
-                    class_name = COCO_CLASSES[class_id]
-                elif 1 <= class_id-1 < len(COCO_CLASSES):
-                    class_name = COCO_CLASSES[class_id-1]
+    
+                cid = int(classes[i])
+                # EfficientDet COCO ids are typically 1-based; fall back to 0-based if needed
+                if 0 <= cid < len(COCO_CLASSES):
+                    name = COCO_CLASSES[cid]
+                elif 0 <= cid - 1 < len(COCO_CLASSES):
+                    name = COCO_CLASSES[cid - 1]
                 else:
-                    class_name = f"class_{class_id}"
-
+                    name = f"class_{cid}"
+    
                 bbox.append([x1, y1, x2, y2])
-                labels.append(class_name)
-                confidences.append(float(scores[i]))
-
+                labels.append(name)
+                confidences.append(s)
+    
             processing_time = time.time() - start_time
             metrics = {
                 "processing_time": processing_time,
@@ -136,10 +132,15 @@ class ObjectDetectionApp:
                 "min_confidence": float(min(confidences)) if confidences else 0.0
             }
             return bbox, labels, confidences, metrics
-
+    
         except Exception as e:
             import traceback
-            return [], [], [], {"error": str(e), "traceback": traceback.format_exc(), "processing_time": time.time() - start_time}
+            return [], [], [], {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "processing_time": time.time() - start_time
+            }
+
 
     def apply_image_enhancements(self, image: Image.Image,
                                  brightness: float,
