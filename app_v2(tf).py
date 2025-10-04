@@ -23,16 +23,14 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-   background: none !important;
-    -webkit-background-clip: initial !important;
-    -webkit-text-fill-color: initial !important;
-
-    /* now force a visible color */
-    color: #ffffff !important;      /* or #111 for light theme */
-    text-align: center;
-    font-size: 3rem;
-    font-weight: 700;
-    margin-bottom: 2rem;
+        background: none !important;
+        -webkit-background-clip: initial !important;
+        -webkit-text-fill-color: initial !important;
+        color: #ffffff !important;
+        text-align: center;
+        font-size: 3rem;
+        font-weight: 700;
+        margin-bottom: 2rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -66,29 +64,59 @@ def load_detection_model():
         st.error(f"Failed to load model: {str(e)}")
         return None
 
-# --- NEW: universal unpacker for TF-Hub outputs ------------------------------------
-def _unpack_detections(outputs):  # <<< CHANGED (new helper)
+def _unpack_detections(outputs):
     """
     Supports TF-Hub object detection modules that return either:
       - dict with keys like 'detection_boxes', 'detection_scores', 'detection_classes'
       - tuple in the order (boxes, scores, classes, num_detections)
-    Returns numpy arrays: boxes, scores, classes for batch 0.
+    Returns numpy arrays for batch 0: boxes, scores, classes.
     """
-    # EagerTensor or dict?
     if isinstance(outputs, dict):
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
-        # some hubs use 'detection_class_entities' (strings) instead of ids
         classes_tensor = outputs.get("detection_classes", outputs.get("detection_class_entities"))[0]
         classes = classes_tensor.numpy() if hasattr(classes_tensor, "numpy") else classes_tensor
     else:
-        # Treat like tuple: (boxes, scores, classes, num_detections)
         boxes = outputs[0][0].numpy()
         scores = outputs[1][0].numpy()
         classes_tensor = outputs[2][0]
         classes = classes_tensor.numpy() if hasattr(classes_tensor, "numpy") else classes_tensor
     return boxes, scores, classes
-# -----------------------------------------------------------------------------------
+
+def _boxes_to_pixels(boxes: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
+    """
+    Convert boxes to pixel coordinates, robust to either normalized [0,1]
+    or already-in-pixels inputs. Expects boxes as [N, 4] in (ymin, xmin, ymax, xmax).
+    Returns int32 array [N,4] as (x1,y1,x2,y2) clipped to image bounds.
+    """
+    boxes = np.asarray(boxes, dtype=np.float32)
+    if boxes.size == 0:
+        return boxes.astype(np.int32)
+
+    # Detect whether boxes are normalized (all coords <= ~1.01)
+    normalized = float(np.nanmax(boxes)) <= 1.01
+
+    ymin = boxes[:, 0]
+    xmin = boxes[:, 1]
+    ymax = boxes[:, 2]
+    xmax = boxes[:, 3]
+
+    if normalized:
+        x1 = (xmin * img_w)
+        y1 = (ymin * img_h)
+        x2 = (xmax * img_w)
+        y2 = (ymax * img_h)
+    else:
+        x1, y1, x2, y2 = xmin, ymin, xmax, ymax
+
+    # Clip to bounds and cast
+    x1 = np.clip(x1, 0, img_w - 1)
+    y1 = np.clip(y1, 0, img_h - 1)
+    x2 = np.clip(x2, 0, img_w - 1)
+    y2 = np.clip(y2, 0, img_h - 1)
+
+    coords = np.stack([x1, y1, x2, y2], axis=-1).astype(np.int32)
+    return coords
 
 class ObjectDetectionApp:
     def __init__(self):
@@ -97,7 +125,6 @@ class ObjectDetectionApp:
     def detect_objects_tf(self, image_pil: Image.Image, confidence: float = 0.5) -> Tuple[List, List, List, dict]:
         """Detect objects using TensorFlow Hub model"""
         start_time = time.time()
-        
         try:
             if self.model is None:
                 st.write("Loading detection model...")
@@ -105,52 +132,45 @@ class ObjectDetectionApp:
             if self.model is None:
                 raise Exception("Model failed to load")
             
-            st.write("Running object detection...")
-            
-            # Convert PIL to numpy
-            img_array = np.array(image_pil)
+            # PIL -> numpy (RGB)
+            img_array = np.array(image_pil.convert("RGB"))
             if img_array.dtype != np.uint8:
                 img_array = (img_array * 255).astype(np.uint8)
-            
+
             # Add batch dimension
-            img_tensor = tf.convert_to_tensor(img_array)
-            img_tensor = tf.expand_dims(img_tensor, 0)
+            img_tensor = tf.convert_to_tensor(img_array)[tf.newaxis, ...]  # [1,H,W,3]
             
             # Run detection
-            outputs = self.model(img_tensor)  # <<< CHANGED (renamed results -> outputs)
+            outputs = self.model(img_tensor)
 
-            # Robustly extract (boxes, scores, classes) no matter the return type
-            detection_boxes, detection_scores, detection_classes = _unpack_detections(outputs)  # <<< CHANGED
+            # Extract detections
+            detection_boxes, detection_scores, detection_classes = _unpack_detections(outputs)
 
-            # Convert to image coordinates
-            height, width = img_array.shape[:2]
+            H, W = img_array.shape[:2]
+            pixel_boxes = _boxes_to_pixels(detection_boxes, W, H)
+
             bbox, labels, confidences = [], [], []
-            
-            for i in range(len(detection_scores)):
-                if float(detection_scores[i]) >= confidence:
-                    ymin, xmin, ymax, xmax = detection_boxes[i]
-                    x1 = int(xmin * width)
-                    y1 = int(ymin * height)
-                    x2 = int(xmax * width)
-                    y2 = int(ymax * height)
-                    bbox.append([x1, y1, x2, y2])
+            for (x1, y1, x2, y2), score, cls in zip(pixel_boxes, detection_scores, detection_classes):
+                s = float(score)
+                if s < confidence:
+                    continue
+                if x2 <= x1 or y2 <= y1:
+                    continue
 
-                    # classes can be ints (ids) OR strings (entity names)
-                    cls = detection_classes[i]
-                    if isinstance(cls, (bytes, bytearray)):
-                        lbl = cls.decode("utf-8")
-                    elif isinstance(cls, (np.str_, str)):
-                        lbl = str(cls)
-                    else:
-                        cls_id = int(cls)
-                        lbl = COCO_CLASSES[cls_id] if cls_id < len(COCO_CLASSES) else f"class_{cls_id}"
-                    labels.append(lbl)
-                    confidences.append(float(detection_scores[i]))
+                # classes can be ints (ids) OR strings (entity names)
+                if isinstance(cls, (bytes, bytearray)):
+                    lbl = cls.decode("utf-8")
+                elif isinstance(cls, (np.str_, str)):
+                    lbl = str(cls)
+                else:
+                    cid = int(cls)
+                    lbl = COCO_CLASSES[cid] if 0 <= cid < len(COCO_CLASSES) else f"class_{cid}"
+
+                bbox.append([int(x1), int(y1), int(x2), int(y2)])
+                labels.append(lbl)
+                confidences.append(s)
             
             processing_time = time.time() - start_time
-            st.write(f"Detection completed in {processing_time:.2f}s")
-            st.write(f"Found {len(labels)} objects")
-            
             metrics = {
                 "processing_time": processing_time,
                 "total_detections": len(labels),
@@ -164,10 +184,15 @@ class ObjectDetectionApp:
         except Exception as e:
             import traceback
             st.error(f"Detection error: {str(e)}")
-            return [], [], [], {"error": str(e), "traceback": traceback.format_exc(), "processing_time": time.time() - start_time}
+            return [], [], [], {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "processing_time": time.time() - start_time
+            }
     
-    def apply_image_enhancements(self, image: Image.Image, brightness: float, 
-                                contrast: float, sharpness: float, saturation: float = 1.0) -> Image.Image:
+    def apply_image_enhancements(self, image: Image.Image, 
+                                 brightness: float, contrast: float,
+                                 sharpness: float, saturation: float = 1.0) -> Image.Image:
         """Apply image enhancements"""
         try:
             enhanced = image.copy()
@@ -185,7 +210,7 @@ class ObjectDetectionApp:
             return image
     
     def filter_detections(self, bbox: List, labels: List, confidences: List,
-                         selected_classes: List[str]) -> Tuple[List, List, List]:
+                          selected_classes: List[str]) -> Tuple[List, List, List]:
         """Filter detections"""
         if not selected_classes or not labels:
             return bbox, labels, confidences
@@ -239,19 +264,36 @@ class ObjectDetectionApp:
         return df.to_csv(index=False)
 
 def draw_boxes(image_np, boxes, labels, confidences):
-    """Draw bounding boxes"""
+    """Draw bounding boxes (scaled thickness; clipped; always visible)."""
     image = image_np.copy()
+
+    # scale thickness with image size
+    H, W = image.shape[:2]
+    thick = max(2, min(H, W) // 200)
+
     np.random.seed(42)
     unique_labels = list(set(labels))
-    colors = {label: tuple(map(int, np.random.randint(0, 255, 3))) for label in unique_labels}
-    for box, label, conf in zip(boxes, labels, confidences):
-        x1, y1, x2, y2 = map(int, box)
+    colors = {label: tuple(int(v) for v in np.random.randint(0, 255, 3)) for label in unique_labels}
+
+    for (x1, y1, x2, y2), label, conf in zip(boxes, labels, confidences):
+        # safety clip (should already be clipped, but double-sure)
+        x1 = int(np.clip(x1, 0, W - 1))
+        y1 = int(np.clip(y1, 0, H - 1))
+        x2 = int(np.clip(x2, 0, W - 1))
+        y2 = int(np.clip(y2, 0, H - 1))
+        if x2 <= x1 or y2 <= y1:
+            continue
+
         color = colors.get(label, (0, 255, 0))
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, thick)
+
         label_text = f"{label}: {conf:.2f}"
-        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-        cv2.rectangle(image, (x1, y1 - th - 10), (x1 + tw, y1), color, -1)
-        cv2.putText(image, label_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, thick)
+        # draw filled label background
+        y_text = max(th + 6, y1)  # keep text inside image
+        cv2.rectangle(image, (x1, y_text - th - 6), (x1 + tw + 6, y_text), color, -1)
+        cv2.putText(image, label_text, (x1 + 3, y_text - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), thick // 2 + 1)
+
     return image
 
 def main():
@@ -261,7 +303,8 @@ def main():
     
     debug_mode = st.sidebar.checkbox("Debug Mode", value=False)
     st.sidebar.header("Detection Settings")
-    confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.01, 0.95, 0.5, 0.05)
+    # lower default helps show boxes quickly
+    confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.01, 0.95, 0.3, 0.01)
     
     st.sidebar.header("Image Enhancement")
     use_enhancement = st.sidebar.checkbox("Enable Enhancement", value=False)
@@ -341,7 +384,7 @@ def main():
                 st.warning("No objects detected")
                 st.markdown("""
                 ### Troubleshooting:
-                1. Lower the confidence threshold (try 0.1-0.3)
+                1. Lower the confidence threshold (try 0.1–0.3)
                 2. Try a different image with clear objects
                 3. Ensure good lighting and clear visibility
                 """)
