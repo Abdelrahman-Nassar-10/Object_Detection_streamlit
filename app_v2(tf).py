@@ -299,13 +299,13 @@ def main():
         
         with col1:
             st.subheader("Original Image")
-            st.image(image, use_column_width=True)
+            st.image(image)
         
         with col2:
             st.subheader("Enhanced Image" if use_enhancement else "Processing Image")
-            st.image(enhanced_image, use_column_width=True)
+            st.image(enhanced_image)
         
-        if st.button("Analyze Image", type="primary", use_column_width=True):
+        if st.button("Analyze Image", type="primary"):
             st.markdown("---")
             st.subheader("Detection Process")
             
@@ -340,7 +340,7 @@ def main():
                     output_image = draw_boxes(image_np, filtered_bbox, filtered_labels, filtered_conf)
                     
                     st.subheader("Detection Results")
-                    st.image(output_image, caption='Detected Objects', use_column_width=True)
+                    st.image(output_image, caption='Detected Objects')
                     
                     stats = app.create_detection_summary(filtered_labels, filtered_conf)
                     
