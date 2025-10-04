@@ -264,7 +264,11 @@ class ObjectDetectionApp:
         return df.to_csv(index=False)
 
 def draw_boxes(image_np, boxes, labels, confidences):
-    """Draw bounding boxes (scaled thickness; clipped; always visible)."""
+    """Drawing bounding boxes (scaled thickness; clipped; always visible)."""
+    BOX_THICKNESS   = 2     # ← change box line thickness
+    TEXT_SCALE      = 0.7   # ← change text size
+    TEXT_THICKNESS  = 1.5     # ← change text thickness
+    TEXT_MARGIN     = 6     # ← padding above text box
     image = image_np.copy()
 
     # scale thickness with image size
