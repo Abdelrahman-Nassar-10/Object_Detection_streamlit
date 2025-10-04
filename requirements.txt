@@ -12,9 +12,3 @@ tensorflow-hub==0.14.0
 # Additional dependencies
 matplotlib>=3.7.0
 seaborn>=0.12.0
-
-
-
-git add app_v2(yolo3).py requirements.txt app_v2(tf).py packages.txt
-git commit -m "Switch to TensorFlow Hub for reliable object detection"
-git push origin main
