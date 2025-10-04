@@ -323,7 +323,7 @@ def main():
                 """, unsafe_allow_html=True)
         
         # Detection button
-        if st.button("🔍 Analyze Image", type="primary", use_container_width=True):
+        if st.button("🔍 Analyze Image", type="primary", use_column_width=True):
             
             st.markdown("---")
             st.subheader("🔄 Detection Process")
