@@ -52,11 +52,13 @@ COCO_CLASSES = [
 
 @st.cache_resource(show_spinner=False)
 def load_detection_model():
-    """Load TensorFlow Hub object detection model"""
+    """Load TF-Hub EfficientDet and return a callable (serving_default if available)."""
     try:
         model_url = "https://tfhub.dev/tensorflow/efficientdet/lite2/detection/1"
-        model = hub.load(model_url)
-        return model
+        m = hub.load(model_url)
+        # Prefer the serving signature if present (some hubs need this)
+        fn = m.signatures.get("serving_default", None)
+        return fn if fn is not None else m
     except Exception as e:
         st.error(f"Failed to load model: {str(e)}")
         return None
