@@ -304,7 +304,7 @@ def main():
             st.image(image, use_container_width=True)        
         with col2:
             st.subheader("Enhanced Image" if use_enhancement else "Processing Image")
-            st.image(enhanced_image, use_column_width=True)
+            st.image(enhanced_image, use_container_width=True)
         
         if st.button("Analyze Image", type="primary", use_container_width=True):
             st.markdown("---")
