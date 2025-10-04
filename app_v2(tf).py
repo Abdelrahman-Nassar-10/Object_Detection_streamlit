@@ -253,7 +253,7 @@ def draw_boxes(image_np, boxes, labels, confidences):
 
 def main():
     app = ObjectDetectionApp()
-    st.markdown('<h1 class="main-header">Advanced Object Detection Studio</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Advanced Object Detection Studio</h1>')
     st.info("Using TensorFlow Hub EfficientDet - Detects 90+ object classes")
     
     debug_mode = st.sidebar.checkbox("Debug Mode", value=False)
