@@ -199,17 +199,22 @@ class ObjectDetectionApp:
             "max_confidence": max(confidences) if confidences else 0,
             "min_confidence": min(confidences) if confidences else 0
         }
-    
     def export_results_json(self, labels: List[str], confidences: List[float], bboxes: List) -> str:
         """Export as JSON"""
         results = []
         for i, label in enumerate(labels):
+            # Convert bbox coordinates to regular Python ints
+            bbox = bboxes[i] if i < len(bboxes) else None
+            if bbox is not None:
+                bbox = [int(x) for x in bbox]  # Convert numpy int32 to Python int
+            
             results.append({
                 "class": label,
                 "confidence": float(confidences[i]) if i < len(confidences) else 0,
-                "bbox": bboxes[i] if i < len(bboxes) else None
+                "bbox": bbox
             })
         return json.dumps(results, indent=2)
+    
     
     def export_results_csv(self, labels: List[str], confidences: List[float]) -> str:
         """Export as CSV"""
@@ -296,8 +301,7 @@ def main():
         
         with col1:
             st.subheader("Original Image")
-            st.image(image, use_column_width=True)
-        
+            st.image(image, use_container_width=True)        
         with col2:
             st.subheader("Enhanced Image" if use_enhancement else "Processing Image")
             st.image(enhanced_image, use_column_width=True)
