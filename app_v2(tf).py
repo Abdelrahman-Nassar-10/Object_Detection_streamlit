@@ -264,41 +264,32 @@ class ObjectDetectionApp:
         return df.to_csv(index=False)
 
 def draw_boxes(image_np, boxes, labels, confidences):
-    """Drawing bounding boxes (scaled thickness; clipped; always visible)."""
     BOX_THICKNESS   = 2     # ← change box line thickness
     TEXT_SCALE      = 0.7   # ← change text size
-    TEXT_THICKNESS  = 1.5     # ← change text thickness
+    TEXT_THICKNESS  = 1     # ← change text thickness
     TEXT_MARGIN     = 6     # ← padding above text box
+
     image = image_np.copy()
-
-    # scale thickness with image size
-    H, W = image.shape[:2]
-    thick = max(2, min(H, W) // 200)
-
     np.random.seed(42)
     unique_labels = list(set(labels))
-    colors = {label: tuple(int(v) for v in np.random.randint(0, 255, 3)) for label in unique_labels}
+    colors = {label: tuple(map(int, np.random.randint(0, 255, 3))) for label in unique_labels}
 
-    for (x1, y1, x2, y2), label, conf in zip(boxes, labels, confidences):
-        # safety clip (should already be clipped, but double-sure)
-        x1 = int(np.clip(x1, 0, W - 1))
-        y1 = int(np.clip(y1, 0, H - 1))
-        x2 = int(np.clip(x2, 0, W - 1))
-        y2 = int(np.clip(y2, 0, H - 1))
-        if x2 <= x1 or y2 <= y1:
-            continue
-
+    for box, label, conf in zip(boxes, labels, confidences):
+        x1, y1, x2, y2 = map(int, box)
         color = colors.get(label, (0, 255, 0))
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, thick)
 
+        # rectangle
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, BOX_THICKNESS)
+
+        # text + background
         label_text = f"{label}: {conf:.2f}"
-        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, thick)
-        # draw filled label background
-        y_text = max(th + 6, y1)  # keep text inside image
-        cv2.rectangle(image, (x1, y_text - th - 6), (x1 + tw + 6, y_text), color, -1)
-        cv2.putText(image, label_text, (x1 + 3, y_text - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), thick // 2 + 1)
+        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, TEXT_SCALE, TEXT_THICKNESS)
+        cv2.rectangle(image, (x1, y1 - th - TEXT_MARGIN), (x1 + tw, y1), color, -1)
+        cv2.putText(image, label_text, (x1, y1 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, TEXT_SCALE, (255, 255, 255), TEXT_THICKNESS)
 
     return image
+
 
 def main():
     app = ObjectDetectionApp()
