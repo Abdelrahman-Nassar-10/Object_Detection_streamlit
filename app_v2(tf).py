@@ -17,7 +17,7 @@ import zipfile
 
 # Page configuration
 st.set_page_config(
-    page_title="Advanced Object Detection Studio",
+    page_title="Object Detection Studio",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -770,7 +770,7 @@ def main():
         return
     
     # Single Image Detection Page
-    st.markdown('<h1 class="main-header">🔍 Advanced Object Detection Studio</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🔍 Object Detection Studio</h1>', unsafe_allow_html=True)
     st.info("🤖 Using TensorFlow Hub EfficientDet-Lite2 - Detects 90+ object classes")
     
     st.header("📁 Upload & Process")
