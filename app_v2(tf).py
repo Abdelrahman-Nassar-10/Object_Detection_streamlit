@@ -26,14 +26,17 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    .main-header {
+.main-header {
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: #667eea;  /* Fallback color for browsers that don't support gradient text */
         text-align: center;
         font-size: 3rem;
         font-weight: 700;
         margin-bottom: 2rem;
+        padding: 1rem 0;
     }
     
     .stats-card {
