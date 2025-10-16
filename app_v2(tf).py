@@ -652,7 +652,7 @@ class ObjectDetectionApp:
 
 def main():
     app = ObjectDetectionApp()
-     st.markdown('<h1 class="main-header">🔍 Object Detection Studio</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🔍 Object Detection Studio</h1>', unsafe_allow_html=True)
     # Sidebar Navigation
     st.sidebar.markdown('<h2 style="color: #667eea;">🔍 Navigation</h2>', unsafe_allow_html=True)
     page = st.sidebar.radio(
