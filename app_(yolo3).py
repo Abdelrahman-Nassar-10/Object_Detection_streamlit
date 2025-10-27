@@ -1,6 +1,3 @@
-#to run locally just run the python code then copy this into the terminal [streamlit run "c:/ML stuff/ObjectDetectiontask/app_v2.py"]
-
-
 import streamlit as st
 import cv2
 import cvlib as cv
